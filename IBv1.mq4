@@ -108,7 +108,7 @@ string BarType(int index)
 // Need to recognize
 // 1. IB must trade through or test the 3 EMA. Helpfull if more of the 3 bars thouch or trade through the 3 EMA
 // 2. The difference between 3 and 6 EMA (MACD) must contract on the IB. So that 3EMA[0] - 6EMA[0] < 3EMA[1] - 6EMA[1]. We need a contraction!
-// 3. We want to see Expantion of the MACD from index + 2 to index +1. So the two bars before the IB must have a positive trend also on the MACD
+// 3. We want to see Expantion of the MACD from index + 2 (point 2) to index +1 (point 1). So the two bars before the IB must have a positive trend also on the MACD
 // 4. We need to be sure that the contraction is the first since 3 EMA crossed the 6 EMA. OR. Highest High on MACD since it crossed. So first up-move.
 // (video 5)
 
@@ -123,18 +123,21 @@ string BarType(int index)
 
 
 // 1. IB must trade through or test the 3 EMA
-   bool ib_touch_3_ema=thouch_check(index);
+   bool ib_touch_3_ema=ThouchCheck(index);
 //bool point1_touch_3_ema = thouch_check(index + 1); // Amplifyer 1, (optional)
 //bool point2_touch_3_ema = thouch_check(index + 2); // Amplifyer 2, (optional)
 
 // 2. The difference between 3 and 6 EMA (MACD) must contract on the IB. So that 3EMA[0] - 6EMA[0] < 3EMA[1] - 6EMA[1]. We need a contraction!
-   bool contraction=contraction_check(index);
+   bool contraction=ContractionCheck(index);
 
-   if(inside_bar && up_trend && ib_touch_3_ema)
+// 3. We want to see Expantion of the MACD from index + 2 (point 2) to index +1 (point 1). So the two bars before the IB must have a positive trend also on the MACD
+   bool expantion_point1_pont2 = ExpantionCheck(index);
+
+   if(inside_bar && up_trend && ib_touch_3_ema && contraction && expantion_point1_pont2)
      {
       return "IBup";
      }
-   else if(inside_bar && down_trend && ib_touch_3_ema)
+   else if(inside_bar && down_trend && ib_touch_3_ema && contraction && expantion_point1_pont2)
      {
       return "IBdown";
      }
@@ -147,10 +150,11 @@ string BarType(int index)
 //+------------------------------------------------------------------+
 //| Touch EMA3, this checks requirement 1.                           |
 //+------------------------------------------------------------------+
-bool thouch_check(int index)
+bool ThouchCheck(int index)
   {
    double ema_3=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index);
-   printf("High: "+DoubleToStr(High[index])+", EMA3: "+DoubleToStr(ema_3)+"Low: "+DoubleToStr(Low[index]));
+//printf("High: "+DoubleToStr(High[index])+", EMA3: "+DoubleToStr(ema_3)+"Low: "+DoubleToStr(Low[index]));
+
    if(ema_3>=Low[index] && ema_3<=High[index])
      {
       return true;
@@ -164,32 +168,93 @@ bool thouch_check(int index)
 //|  Contraction check, requerement 2.                               |
 //+------------------------------------------------------------------+
 // 2. The difference between 3 and 6 EMA (MACD) must contract on the IB. So that 3EMA[0] - 6EMA[0] < 3EMA[1] - 6EMA[1]. We need a contraction!
-bool contraction_check(int index)
+// Remember the oposite for down trends!
+bool ContractionCheck(int index)
   {
    double ema_3=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index);
    double ema_6=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index);
 
-   double ema_3_point1=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index);
-   double ema_6_point1=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index);
+   double ema_3_point1=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index + 1);
+   double ema_6_point1=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index + 1);
 
-   double macd=ema_3-ema_6;
-   double macd_point1=ema_3_point1-ema_6_point1;
+   double macd=(ema_3-ema_6);
+   double macd_point1=(ema_3_point1-ema_6_point1);
 
 // First identify up or down micro trend.
-   if(ema_3>ema_6)
+   if(ema_3>ema_6) // Up-trend
      {
-
+      printf("EMA3 "+ema_3);
+      printf("EMA6 "+ema_6);
+      printf("correct? "+(ema_3>ema_6));
+      if(macd<macd_point1)
+        {
+         return true;
+        }
+      else
+        {
+         return false;
+        }
      }
-   else if(ema_3<ema_6)
+   else if(ema_3<ema_6) // Down-trend
      {
+      printf("EMA3 "+ema_3);
+      printf("EMA6 "+ema_6);
+      printf("correct? "+(ema_3<ema_6));
+      if(macd>macd_point1)
+        {
+         return true;
+        }
+      else
+        {
+         return false;
+        }
+     }
+   else // Equal ema 3 and 6, should return no trend
+     {
+      return false;
+     }
+  }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+// 3. We want to see Expantion of the MACD from index + 2 (point 2) to index +1 (point 1). So the two bars before the IB must have a positive trend also on the MACD
+bool ExpantionCheck(int index)
+  {
+   double ema_3_point1=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index + 1);
+   double ema_6_point1=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index + 1);
 
+   double ema_3_point2=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index + 2);
+   double ema_6_point2=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index + 2);
+
+   double macd_point1=(ema_3_point1-ema_6_point1);
+   double macd_point2=(ema_3_point2-ema_6_point2);
+   
+   if(ema_3_point1 > ema_6_point1)
+     {
+       if(macd_point1>macd_point2)
+         {
+          return true;
+         }
+       else
+         {
+          return false;
+         }
+     }
+   else if(ema_3_point1 < ema_6_point1)
+     {
+       if(macd_point1<macd_point2)
+         {
+          return true;
+         }
+       else
+         {
+          return false;
+         }  
      }
    else
      {
       return false;
      }
-
-   return true;
   }
 //+------------------------------------------------------------------+
 //|                                                                  |
