@@ -131,13 +131,16 @@ string BarType(int index)
    bool contraction=ContractionCheck(index);
 
 // 3. We want to see Expantion of the MACD from index + 2 (point 2) to index +1 (point 1). So the two bars before the IB must have a positive trend also on the MACD
-   bool expantion_point1_pont2 = ExpantionCheck(index);
+   bool expantion_point1_pont2=ExpantionCheck(index);
 
-   if(inside_bar && up_trend && ib_touch_3_ema && contraction && expantion_point1_pont2)
+   bool first_contraction=FirstContraction(index+1);
+   bool peak_macd=PeakMACD(index+1);
+
+   if(inside_bar && up_trend && ib_touch_3_ema && contraction && expantion_point1_pont2 && (first_contraction || peak_macd) )
      {
       return "IBup";
      }
-   else if(inside_bar && down_trend && ib_touch_3_ema && contraction && expantion_point1_pont2)
+   else if(inside_bar && down_trend && ib_touch_3_ema && contraction && expantion_point1_pont2 && (first_contraction || peak_macd))
      {
       return "IBdown";
      }
@@ -148,7 +151,7 @@ string BarType(int index)
 
   }
 //+------------------------------------------------------------------+
-//| Touch EMA3, this checks requirement 1.                           |
+//|  Touch EMA3, this checks requirement 1.                          |
 //+------------------------------------------------------------------+
 bool ThouchCheck(int index)
   {
@@ -171,21 +174,15 @@ bool ThouchCheck(int index)
 // Remember the oposite for down trends!
 bool ContractionCheck(int index)
   {
-   double ema_3=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index);
-   double ema_6=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index);
 
-   double ema_3_point1=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index + 1);
-   double ema_6_point1=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index + 1);
+   string ema_sign=EMA_sign(index);
 
-   double macd=(ema_3-ema_6);
-   double macd_point1=(ema_3_point1-ema_6_point1);
+   double macd=MACD(index);
+   double macd_point1=MACD(index+1);
 
 // First identify up or down micro trend.
-   if(ema_3>ema_6) // Up-trend
+   if(ema_sign=="positive") // Up-trend
      {
-      printf("EMA3 "+ema_3);
-      printf("EMA6 "+ema_6);
-      printf("correct? "+(ema_3>ema_6));
       if(macd<macd_point1)
         {
          return true;
@@ -195,11 +192,8 @@ bool ContractionCheck(int index)
          return false;
         }
      }
-   else if(ema_3<ema_6) // Down-trend
+   else if(ema_sign=="negative") // Down-trend
      {
-      printf("EMA3 "+ema_3);
-      printf("EMA6 "+ema_6);
-      printf("correct? "+(ema_3<ema_6));
       if(macd>macd_point1)
         {
          return true;
@@ -215,45 +209,115 @@ bool ContractionCheck(int index)
      }
   }
 //+------------------------------------------------------------------+
-//|                                                                  |
+//|  Expantion check, checks if we have an uptrend right before      |
 //+------------------------------------------------------------------+
 // 3. We want to see Expantion of the MACD from index + 2 (point 2) to index +1 (point 1). So the two bars before the IB must have a positive trend also on the MACD
 bool ExpantionCheck(int index)
   {
-   double ema_3_point1=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index + 1);
-   double ema_6_point1=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index + 1);
+   string ema_sign=EMA_sign(index+1);
 
-   double ema_3_point2=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index + 2);
-   double ema_6_point2=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index + 2);
+   double macd_point1= MACD(index+1);
+   double macd_point2= MACD(index+2);
 
-   double macd_point1=(ema_3_point1-ema_6_point1);
-   double macd_point2=(ema_3_point2-ema_6_point2);
-   
-   if(ema_3_point1 > ema_6_point1)
+   if(ema_sign=="positive")
      {
-       if(macd_point1>macd_point2)
-         {
-          return true;
-         }
-       else
-         {
-          return false;
-         }
+      if(macd_point1>macd_point2)
+        {
+         return true;
+        }
+      else
+        {
+         return false;
+        }
      }
-   else if(ema_3_point1 < ema_6_point1)
+   else if(ema_sign=="negative")
      {
-       if(macd_point1<macd_point2)
-         {
-          return true;
-         }
-       else
-         {
-          return false;
-         }  
+      if(macd_point1<macd_point2)
+        {
+         return true;
+        }
+      else
+        {
+         return false;
+        }
      }
    else
      {
       return false;
+     }
+  }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+// 4a. We need to be sure that the contraction is the first since 3 EMA crossed the 6 EMA.
+bool FirstContraction(int index)
+  {
+
+   string ema_sign=EMA_sign(index);
+   int i=index;
+
+   while(EMA_sign(i)==ema_sign)
+     {
+      if(ContractionCheck(i)==true)
+        {
+         return false;
+        }
+      i++;
+     }
+   return true;
+  }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+// 4b. OR. Highest High on MACD since it crossed.
+bool PeakMACD(int index)
+  {
+
+   string ema_sign=EMA_sign(index);
+   int i=index;
+   double start_macd=MathAbs(MACD(index));
+
+   while(EMA_sign(i)==ema_sign)
+     {
+      if(start_macd<MathAbs(MACD(i)))
+        {
+         return false;
+        }
+      i++;
+     }
+   return true;
+  }
+//+------------------------------------------------------------------+
+//| MACD                                                             |
+//+------------------------------------------------------------------+
+double MACD(int index)
+  {
+   double ema_3=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index);
+   double ema_6=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index);
+
+   double macd=(ema_3-ema_6);
+
+   return macd;
+  }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+string EMA_sign(int index)
+  {
+   double ema_3=iMA(Symbol(),Period(),3,0,MODE_EMA,PRICE_CLOSE,index);
+   double ema_6=iMA(Symbol(),Period(),6,0,MODE_EMA,PRICE_CLOSE,index);
+
+   if(ema_3>ema_6)
+     {
+      return "positive";
+     }
+   else if(ema_3<ema_6)
+     {
+      return "negative";
+     }
+   else
+     {
+      return "equal";
      }
   }
 //+------------------------------------------------------------------+
